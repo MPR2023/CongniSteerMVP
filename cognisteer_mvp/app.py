@@ -4,6 +4,7 @@ from typing import Optional
 import logging
 from pythonjsonlogger import jsonlogger
 from .nlp_search import search_with_nlp  # Ensure search_with_nlp returns a list of dicts
+from .protocol_mapping import protocol_mapping
 
 # Set up structured logging
 logger = logging.getLogger()
@@ -19,6 +20,7 @@ app = FastAPI()
 # Define the QueryRequest model once
 class QueryRequest(BaseModel):
     query: str
+    area: Optional[str] = None
     session_id: Optional[str] = None
 
 # GET /health endpoint
@@ -30,10 +32,21 @@ def health_check():
 @app.post("/query")
 async def query_protocols(request: QueryRequest):
     try:
+        # Log session and query info
         if request.session_id:
-            logger.info(f"Session ID: {request.session_id} - Received query: {request.query}")
-        results = search_with_nlp(request.query)  # Using our existing search function
-        return {"status": "success", "results": results}
+            logger.info(f"Session ID: {request.session_id} - Received query: {request.query} with area: {request.area}")
+        else:
+            logger.info(f"Received query: {request.query} with area: {request.area}")
+
+        # If an area is provided and exists in our mapping, use it
+        if request.area and request.area in protocol_mapping:
+            mapping = protocol_mapping[request.area]
+            logger.info(f"Area mapping found for area: {request.area}")
+            return {"status": "success", "results": [mapping]}
+        else:
+            # Fallback: Process query with the NLP search
+            results = search_with_nlp(request.query)
+            return {"status": "success", "results": results}
     except Exception as e:
         logger.error(f"Error processing query: {str(e)}")
         raise HTTPException(status_code=500, detail="An error occurred while processing the query.")
